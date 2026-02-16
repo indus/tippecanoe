@@ -56,6 +56,7 @@ int minzoom = 0;
 std::map<std::string, std::string> renames;
 bool exclude_all = false;
 bool exclude_all_tile_attributes = false;
+bool exclude_all_tile_geometries = false;
 std::vector<std::string> unidecode_data;
 
 bool want_overzoom = false;
@@ -323,42 +324,46 @@ void append_tile(std::string message, int z, unsigned x, unsigned y, std::map<st
 					}
 				}
 
-				outfeature.type = feat.type;
-				outfeature.geometry = feat.geometry;
+				if (exclude_all_tile_geometries) {
+					outfeature.type = -1;
+				} else {
+					outfeature.type = feat.type;
+					outfeature.geometry = feat.geometry;
 
-				if (layer.extent != outlayer.extent) {
-					for (size_t i = 0; i < outfeature.geometry.size(); i++) {
-						outfeature.geometry[i].x = outfeature.geometry[i].x * outlayer.extent / layer.extent;
-						outfeature.geometry[i].y = outfeature.geometry[i].y * outlayer.extent / layer.extent;
-					}
-				}
-
-				for (auto const &g : outfeature.geometry) {
-					if (g.op == mvt_moveto || g.op == mvt_lineto) {
-						// pin to the tile extent, since we don't want bounds bigger than the earth
-						long long gx = std::min((long long) outlayer.extent, std::max(0LL, g.x));
-						long long gy = std::min((long long) outlayer.extent, std::max(0LL, g.y));
-
-						// to world scale
-						gx = gx * (1LL << (32 - z)) / outlayer.extent;
-						gy = gy * (1LL << (32 - z)) / outlayer.extent;
-
-						// to world offset
-						gx += (1LL << (32 - z)) * x;
-						gy += (1LL << (32 - z)) * y;
-
-						minx = std::min(minx, gx);
-						miny = std::min(miny, gy);
-						maxx = std::max(maxx, gx);
-						maxy = std::max(maxy, gy);
-
-						// if in the western hemisphere, try shifting to east
-						if (gx < (1LL << 31)) {
-							gx += 1LL << 32;
+					if (layer.extent != outlayer.extent) {
+						for (size_t i = 0; i < outfeature.geometry.size(); i++) {
+							outfeature.geometry[i].x = outfeature.geometry[i].x * outlayer.extent / layer.extent;
+							outfeature.geometry[i].y = outfeature.geometry[i].y * outlayer.extent / layer.extent;
 						}
+ 					}
 
-						minx2 = std::min(minx2, gx);
-						maxx2 = std::max(maxx2, gx);
+					for (auto const &g : outfeature.geometry) {
+						if (g.op == mvt_moveto || g.op == mvt_lineto) {
+							// pin to the tile extent, since we don't want bounds bigger than the earth
+							long long gx = std::min((long long) outlayer.extent, std::max(0LL, g.x));
+							long long gy = std::min((long long) outlayer.extent, std::max(0LL, g.y));
+
+							// to world scale
+							gx = gx * (1LL << (32 - z)) / outlayer.extent;
+							gy = gy * (1LL << (32 - z)) / outlayer.extent;
+
+							// to world offset
+							gx += (1LL << (32 - z)) * x;
+							gy += (1LL << (32 - z)) * y;
+
+							minx = std::min(minx, gx);
+							miny = std::min(miny, gy);
+							maxx = std::max(maxx, gx);
+							maxy = std::max(maxy, gy);
+
+							// if in the western hemisphere, try shifting to east
+							if (gx < (1LL << 31)) {
+								gx += 1LL << 32;
+							}
+
+							minx2 = std::min(minx2, gx);
+							maxx2 = std::max(maxx2, gx);
+						}
 					}
 				}
 
@@ -1309,6 +1314,7 @@ int main(int argc, char **argv) {
 		{"exclude-all", no_argument, 0, 'X'},
 		{"include", required_argument, 0, 'y'},
 		{"exclude-all-tile-attributes", no_argument, 0, '~'},
+		{"exclude-all-tile-geometries", no_argument, 0, '~'},
 		{"layer", required_argument, 0, 'l'},
 		{"exclude-layer", required_argument, 0, 'L'},
 		{"quiet", no_argument, 0, 'q'},
@@ -1507,6 +1513,8 @@ int main(int argc, char **argv) {
 				unidecode_data = read_unidecode(optarg);
 			} else if (strcmp(opt, "exclude-all-tile-attributes") == 0) {
 				exclude_all_tile_attributes = true;
+			} else if (strcmp(opt, "exclude-all-tile-geometries") == 0) {
+				exclude_all_tile_geometries = true;
 			} else {
 				fprintf(stderr, "%s: Unrecognized option --%s\n", argv[0], opt);
 				exit(EXIT_ARGS);
